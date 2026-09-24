@@ -33,7 +33,7 @@ func (d TeradataDriver) Open(dsn string) (driver.Conn, error) {
 }
 
 func init() {
-	sql.Register("teradatasql", &TeradataDriver{})
+	sql.Register("teradata", &TeradataDriver{})
 }
 
 func NewConnector(cfg *Config) (driver.Connector, error) {

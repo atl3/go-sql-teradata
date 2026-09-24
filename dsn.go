@@ -64,6 +64,27 @@ type Config struct {
 	sslLevel     int
 }
 
+func NewConfig() *Config {
+	cfg := &Config{
+		Port:                1025,
+		CopMode:             true,
+		CopLast:             true,
+		SSLMode:             "PREFER",
+		SSLProtocol:         "TLSv1.3",
+		Timeout:             60 * time.Second,
+		TMode:               "DEFAULT",
+		SSLPort:             443,
+		redriveLevel:        3,
+		LOBSupport:          true,
+		LOBRecieveThreshold: 1000,
+		LOBPrefetch:         false,
+		Partition:           "DBC/SQL",
+		ConnectFunction:     0,
+	}
+	cfg.normalize()
+	return cfg
+}
+
 func NewTeradataConfig(host, user, pass string) *Config {
 	cfg := &Config{
 		Host:                host,
@@ -150,6 +171,14 @@ func (c *Config) ToDSN() (string, error) {
 	dsnBuilder.WriteRune('?')
 	dsnBuilder.WriteString(generateDsnParamString(c))
 	return dsnBuilder.String(), nil
+}
+
+func (c *Config) FormatDSN() string {
+	dsn, err := c.ToDSN()
+	if err != nil {
+		return ""
+	}
+	return dsn
 }
 
 func (c *Config) normalize() {

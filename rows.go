@@ -513,8 +513,14 @@ func produceColumnValue(r *bufferReader, meta *statementInfoMetaDataFull, isNull
 }
 
 func decimalString(raw *big.Int, scale int) string {
-	if scale <= 0 {
+	if scale == 0 {
 		return raw.String()
+	}
+	if scale < 0 {
+		if raw.Sign() == 0 {
+			return "0"
+		}
+		return raw.String() + strings.Repeat("0", -scale)
 	}
 
 	neg := raw.Sign() < 0

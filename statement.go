@@ -60,7 +60,7 @@ func (stmt *teradataStatement) CheckNamedValue(nv *driver.NamedValue) (err error
 }
 
 func (stmt *teradataStatement) Exec(args []driver.Value) (driver.Result, error) {
-	err := stmt.execute(args)
+	err := stmt.execute(args, false)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (stmt *teradataStatement) Exec(args []driver.Value) (driver.Result, error) 
 }
 
 func (stmt *teradataStatement) Query(args []driver.Value) (driver.Rows, error) {
-	err := stmt.execute(args)
+	err := stmt.execute(args, true)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func namedValuesToValues(args []driver.NamedValue) ([]driver.Value, error) {
 	return vals, nil
 }
 
-func (stmt *teradataStatement) execute(args []driver.Value) error {
+func (stmt *teradataStatement) execute(args []driver.Value, query bool) error {
 	parmLen := len(stmt.statementInfo.paramMarkerMetaItems())
 	argsLen := len(args)
 	if parmLen != argsLen {
@@ -173,9 +173,13 @@ func (stmt *teradataStatement) execute(args []driver.Value) error {
 	if stmt.conn.isLobReceivable() {
 		parcels[parcelLen-2] = newSlobRespondParcel(stmt.conn.capabilities, stmt.conn.config)
 	}
-	parcels[parcelLen-1] = stmt.conn.getRespondParcel()
+	if query {
+		parcels[parcelLen-1] = stmt.conn.getRespondParcel()
+	} else {
+		parcels[parcelLen-1] = newRespondParcel(stmt.conn.capabilities, stmt.conn.config)
+	}
 
-	if stmt.conn.isLobReceivable() && stmt.conn.isKeepResponses() {
+	if stmt.conn.isLobReceivable() && stmt.conn.isKeepResponses() && query {
 		stmt.isOpenKeep = true
 	} else {
 		stmt.isOpenKeep = false

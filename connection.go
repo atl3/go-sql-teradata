@@ -89,6 +89,7 @@ type connectionCapabilities struct {
 	maxResponseMessageBodySize     int
 	slobClientToServerSupport      byte
 	numberDataTypeSupport          bool
+	statementInfoRequestSupport    bool
 }
 
 func (c *connectionCapabilities) String() string {
@@ -113,7 +114,8 @@ func (c *connectionCapabilities) String() string {
 			"maxResponseMessageBodySize: %d,"+
 			"slobClientToServerSupport: %d, "+
 			"aphSupport: %t,"+
-			"numberDataTypeSupport: %t"+
+			"numberDataTypeSupport: %t,"+
+			"statementInfoRequestSupport: %t"+
 			"}",
 		c.defaultTransactionSemantics,
 		c.statementStatusLevel,
@@ -135,6 +137,7 @@ func (c *connectionCapabilities) String() string {
 		c.slobClientToServerSupport,
 		c.aphSupport,
 		c.numberDataTypeSupport,
+		c.statementInfoRequestSupport,
 	)
 }
 
@@ -160,6 +163,7 @@ func newConnectionCapabilities(cnfg *configResponseParcel) *connectionCapabiliti
 		maxResponseMessageBodySize:     int(cnfg.maxResponseBytes),
 		slobClientToServerSupport:      cnfg.slobClientToServerSupport,
 		numberDataTypeSupport:          cnfg.numberDataTypeSupport >= 1 && cnfg.statementInfoSupport >= 1,
+		statementInfoRequestSupport:    cnfg.statementInfoRequestSupport >= 1,
 	}
 	if c.maxResponseMessageBodySize == 0 {
 		c.maxResponseMessageBodySize = 1048500

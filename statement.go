@@ -151,7 +151,11 @@ func (stmt *teradataStatement) execute(args []driver.Value, query bool) error {
 	}
 	parcelLen := 3
 	if parmLen > 0 {
-		parcelLen = 5
+		if stmt.conn.capabilities.statementInfoRequestSupport {
+			parcelLen = 6
+		} else {
+			parcelLen = 5
+		}
 	}
 	if stmt.conn.isLobReceivable() {
 		parcelLen += 1
@@ -166,8 +170,14 @@ func (stmt *teradataStatement) execute(args []driver.Value, query bool) error {
 		for i, p := range paramMetas {
 			dataTypes[i] = p.getDataType()
 		}
-		parcels[2] = newDataInfoParcel(dataTypes, args, paramMetas)
-		parcels[3] = newIndicDataParcel(dataTypes, args, paramMetas)
+
+		paramParcels, err := createParamParcels(stmt.conn.capabilities, dataTypes, args, paramMetas)
+		if err != nil {
+			return err
+		}
+		for i, parcel := range paramParcels {
+			parcels[i+2] = parcel
+		}
 	}
 
 	if stmt.conn.isLobReceivable() {

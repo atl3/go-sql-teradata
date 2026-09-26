@@ -10,6 +10,59 @@ I started creating this driver while working on another Go project and wanted to
 go get github.com/atl3/go-sql-teradata
 ```
 
+## Basic Usage
+
+Approach 1 - Using NewConnector
+
+```go
+package main
+
+import (
+	"database/sql"
+	"log"
+
+	teradata "github.com/atl3/go-sql-teradata"
+)
+
+func main() {
+	config := teradata.NewConfig()
+	config.Host = "..."
+	config.User = "..."
+	config.Password = "..."
+
+	cnctr, err := teradata.NewConnector(config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db := sql.OpenDB(cnctr)
+	defer db.Close()
+	//...
+}
+```
+
+Approach 2 - Using DSN/Connection String
+
+```go
+package main
+
+import (
+	"database/sql"
+	"log"
+
+	_ "github.com/atl3/go-sql-teradata"
+)
+
+func main() {
+	db, err := sql.Open("teradata", "user:pass@host?COP=OFF&...")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+    // ...
+}
+```
+
 ## Config Options
 
 URL Param names *should* follow the official JDBC driver names and values. Reference the JDBC documentation for detail descriptions of the values. 

@@ -25,6 +25,9 @@ func (c *teradataConnection) writeLanMessage(header *lanHeader, bodyParts ...par
 	if header == nil {
 		return ErrInternal
 	}
+	if err := c.usable(); err != nil {
+		return err
+	}
 
 	// Encyprtion check
 	enc := false
@@ -104,13 +107,15 @@ func (c *teradataConnection) writeLanMessage(header *lanHeader, bodyParts ...par
 }
 
 func (c *teradataConnection) writeLanMessageRaw(data []byte) error {
-	n, err := c.netConn.Write(data)
-	if err != nil {
-		// TODO: Cleanup
+	if err := c.usable(); err != nil {
 		return err
 	}
+	n, err := c.netConn.Write(data)
+	if err != nil {
+		return c.markUnusable(err)
+	}
 	if n != len(data) {
-		return io.ErrShortWrite
+		return c.markUnusable(io.ErrShortWrite)
 	}
 	return nil
 }
@@ -166,24 +171,24 @@ func (c *teradataConnection) readLanMessageRawInto(own bool) ([]byte, int, int, 
 	if c.isTlsConn {
 		_, err := c.readWsFrameHeader()
 		if err != nil {
-			return nil, 0, 0, nil, err
+			return nil, 0, 0, nil, c.markUnusable(err)
 		}
 	}
 
 	// Peek the header so we can get the the length
 	headerBuff, err := c.buffer.peek(lanHeaderLen, c.netConn.Read)
 	if err != nil {
-		return nil, 0, 0, nil, err
+		return nil, 0, 0, nil, c.markUnusable(err)
 	}
 	header, err := lanHeaderFromBuffer(headerBuff)
 	if err != nil {
-		return nil, 0, 0, nil, err
+		return nil, 0, 0, nil, c.markUnusable(err)
 	}
 
 	// Read the header and body together now:
 	data, err := c.readNext(header.msgLen)
 	if err != nil {
-		return nil, 0, 0, header, err
+		return nil, 0, 0, header, c.markUnusable(err)
 	}
 
 	parcelData := data
@@ -196,16 +201,16 @@ func (c *teradataConnection) readLanMessageRawInto(own bool) ([]byte, int, int, 
 	// Handle encrypted response:
 	if header.msgType&0x80 != 0 {
 		if c.gss == nil {
-			return nil, 0, 0, header, ErrNoSecureChannel
+			return nil, 0, 0, header, c.markUnusable(ErrNoSecureChannel)
 		}
 
 		// First 24 bytes are clear, unwrap the rest
 		plaintext, err := c.gss.unwrap(data[24:])
 		if err != nil {
-			return nil, 0, 0, header, err
+			return nil, 0, 0, header, c.markUnusable(err)
 		}
 		if len(plaintext) < lanHeaderLen-24 {
-			return nil, 0, 0, header, ErrInternal
+			return nil, 0, 0, header, c.markUnusable(ErrInternal)
 		}
 		controlDataLength := binary.BigEndian.Uint32(plaintext[16:20]) // offset 40 - 24
 		parcelData = plaintext

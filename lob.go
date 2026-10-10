@@ -196,13 +196,23 @@ func (l *TeradataBlob) Scan(src any) error {
 }
 
 func (l *terataBaseLob) fetch(ctx context.Context) error {
-	if l.conn == nil || l.conn.closed.Load() {
+	if l.conn == nil {
+		return driver.ErrBadConn
+	}
+	if err := l.conn.usable(); err != nil {
 		return driver.ErrBadConn
 	}
 	var lastRead = false
 	return l.conn.runCancelable(ctx, func() error {
 		// Request LOB with locator
 		var err error
+		sent := false
+		defer func() {
+			if err != nil && sent {
+				l.started = false
+				_ = l.conn.sendCancelAndDrain(l.requestNo)
+			}
+		}()
 		if !l.started {
 			err := l.conn.writeLanMessage(
 				l.conn.newLanHeaderStart(),
@@ -226,6 +236,7 @@ func (l *terataBaseLob) fetch(ctx context.Context) error {
 				return err
 			}
 		}
+		sent = true
 
 		parcelData, parcelStart, parcelEnd, _, err := l.conn.readLanMessageRaw()
 		if err != nil {
@@ -278,7 +289,10 @@ func (l *terataBaseLob) fetch(ctx context.Context) error {
 
 		// Close / Release
 		if lastRead {
-			l.conn.sendCancelAndDrain(l.requestNo)
+			err = l.conn.sendCancelAndDrain(l.requestNo)
+			if err != nil && !isTeradataError(err) {
+				return err
+			}
 			err = l.complete()
 			if err != nil {
 				return err

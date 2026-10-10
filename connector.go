@@ -45,12 +45,14 @@ func (c *teradataConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 	// Config / Handshake
 	if ok, err := conn.handshake(); !ok || err != nil {
+		conn.Close()
 		return nil, err
 	}
 
 	// Authenticate
 	err = conn.authenticate()
 	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 
@@ -145,6 +147,7 @@ func (c *teradataConnector) connect(ctx context.Context, tlsFallback bool) (*ter
 				conn.rawConn.Close()
 				return c.connect(ctx, true)
 			}
+			conn.rawConn.Close()
 			return nil, wrapConnectionError(err) //TODO Fallback to 1025
 		}
 		c.config.Logger.Log(context.Background(), logLevelTrace, "TLS Connect OK")
@@ -158,6 +161,7 @@ func (c *teradataConnector) connect(ctx context.Context, tlsFallback bool) (*ter
 				conn.netConn.Close()
 				return c.connect(ctx, true)
 			}
+			conn.rawConn.Close()
 			return nil, wrapConnectionError(err) //TODO Fallback to 1025
 		}
 		conn.isTlsConn = true

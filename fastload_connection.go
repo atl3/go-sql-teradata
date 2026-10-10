@@ -89,6 +89,7 @@ func (c *fastLoadConnection) Open(ctx context.Context) error {
 	c.log(ctx, logLevelTrace, "Attempting to open diagnostic session")
 	dc, err := c.openFastLoadConnection(ctx, fastLoadConnDiag, lsn)
 	if err != nil {
+		c.closeSessions()
 		return err
 	}
 	c.diagnosticSession = dc
@@ -103,6 +104,7 @@ func (c *fastLoadConnection) openFastLoadConnection(ctx context.Context, ctype f
 		return nil, err
 	}
 	if ok, err := conn.handshake(); !ok || err != nil {
+		conn.Close()
 		return nil, err
 	}
 	switch ctype {
@@ -114,6 +116,7 @@ func (c *fastLoadConnection) openFastLoadConnection(ctx context.Context, ctype f
 		err = conn.fastLoadDataAuthenticate(lsn)
 	}
 	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 	return conn, nil

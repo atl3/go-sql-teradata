@@ -24,6 +24,7 @@ import (
 	"net"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type transactionMode int
@@ -32,6 +33,8 @@ const (
 	teraMode transactionMode = iota
 	ansiMode
 )
+
+const logoffTimeout = 10 * time.Second
 
 type teradataConnection struct {
 	connectionID string
@@ -52,6 +55,7 @@ type teradataConnection struct {
 	capabilities *connectionCapabilities
 
 	closed atomic.Bool
+	bad    atomic.Bool
 
 	transactionMode       transactionMode
 	transactionInProgress bool
@@ -215,7 +219,7 @@ func (c *teradataConnection) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *teradataConnection) prepare(query string) (*teradataStatement, error) {
-	if c.closed.Load() {
+	if err := c.usable(); err != nil {
 		return nil, driver.ErrBadConn
 	}
 
@@ -269,7 +273,7 @@ func (c *teradataConnection) prepare(query string) (*teradataStatement, error) {
 
 // Helper for executing inline SQL on the open connection (Begin Transaction, Commit, Rollback, etc)
 func (c *teradataConnection) execSessionSQL(query string) (*statementInfoResponseParcel, error) {
-	if c.closed.Load() {
+	if err := c.usable(); err != nil {
 		return nil, driver.ErrBadConn
 	}
 	err := c.writeLanMessage(
@@ -393,10 +397,7 @@ func (c *teradataConnection) execSessionQuery(query string) ([]driver.Value, err
 }
 
 func (c *teradataConnection) Close() (err error) {
-	if c.closed.Swap(true) {
-		return
-	}
-	if c.netConn == nil {
+	if c.closed.Swap(true) || c.netConn == nil {
 		return nil
 	}
 	// Close the socket even if the logoff exchange fails
@@ -405,6 +406,10 @@ func (c *teradataConnection) Close() (err error) {
 			err = cerr
 		}
 	}()
+	if c.bad.Load() {
+		return nil
+	}
+	c.netConn.SetDeadline(time.Now().Add(logoffTimeout))
 	err = c.writeLanMessage(
 		c.newLanHeaderLogoff(),
 		newLogoffParcel(),
@@ -423,8 +428,7 @@ func (c *teradataConnection) Ping(ctx context.Context) (err error) {
 	}
 	_, err = c.execSessionSQL("--isValid")
 	if err != nil && isConnectionError(err) {
-		c.closed.Store(true)
-		return driver.ErrBadConn
+		return c.markUnusable(err)
 	}
 	return nil
 }
@@ -627,6 +631,31 @@ func (c *teradataConnection) isTlsConnection() bool {
 		return c.isTlsConn
 	}
 	return false
+}
+
+func (con *teradataConnection) markUnusable(err error) error {
+	if err != nil && con.bad.CompareAndSwap(false, true) {
+		con.config.Logger.Log(context.Background(), logLevelTrace, "marking connection as bad", "error", err)
+	}
+	return err
+}
+
+func (con *teradataConnection) usable() error {
+	if con.closed.Load() || con.bad.Load() {
+		return driver.ErrBadConn
+	}
+	return nil
+}
+
+func (con *teradataConnection) IsValid() bool {
+	return !con.closed.Load() && !con.bad.Load()
+}
+
+func (con *teradataConnection) ResetSession(ctx context.Context) error {
+	if con.bad.Load() {
+		return driver.ErrBadConn
+	}
+	return nil
 }
 
 func (t *teradataTransaction) Commit() error {

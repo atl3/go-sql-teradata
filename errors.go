@@ -83,3 +83,8 @@ func isTeradataErrorCode(err error, code int) bool {
 	}
 	return false
 }
+
+func isTeradataError(err error) bool {
+	_, ok := errors.AsType[*TeradataError](err)
+	return ok
+}

@@ -85,8 +85,6 @@ func (c *teradataConnection) runCancelable(ctx context.Context, fn func() error)
 	err := fn()
 
 	if ctx.Err() != nil && isDeadlineErr(err) {
-		c.netConn.SetReadDeadline(time.Time{})
-		_ = c.sendCancelAndDrain(c.sameRequestNumber())
 		return ctx.Err()
 	}
 

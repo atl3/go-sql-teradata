@@ -144,6 +144,14 @@ func namedValuesToValues(args []driver.NamedValue) ([]driver.Value, error) {
 }
 
 func (stmt *teradataStatement) execute(args []driver.Value, query bool) error {
+	if stmt.isOpenKeep {
+		err := stmt.sendCancelAndDrain()
+		if err != nil && !isTeradataError(err) {
+			return err
+		} else {
+			stmt.conn.config.Logger.Log(context.Background(), logLevelTrace, "ignorning cancel statement TD error", "error", err)
+		}
+	}
 	parmLen := len(stmt.statementInfo.paramMarkerMetaItems())
 	argsLen := len(args)
 	if parmLen != argsLen {

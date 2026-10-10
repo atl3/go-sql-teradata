@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Configuration - go-sql-teradata</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Configuration";
+        var mkdocs_page_input_path = "config.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> go-sql-teradata
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">Configuration</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#base-options">Base Options</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#tls-options">TLS Options</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#lob-options">LOB Options</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#fastload-options">FastLoad Options</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Examples</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../fastload/">Fast Load</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../lob/">LOB</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">go-sql-teradata</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Configuration</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="config">Config</h1>
+<h4 id="base-options">Base Options</h4>
+<table>
+<thead>
+<tr>
+<th>Config Option</th>
+<th>URL Param</th>
+<th>Description</th>
+<th>Allowed</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Tmode</code></td>
+<td><code>TMODE</code></td>
+<td>Transaction Mode</td>
+<td><code>DEFAULT</code>,<code>TERA</code>,<code>ANSI</code></td>
+<td><code>DEFAULT</code> (Server Default)</td>
+</tr>
+<tr>
+<td><code>CopMode</code></td>
+<td><code>COP</code></td>
+<td>Enable/Disable COP Discovery</td>
+<td><code>ON</code>,<code>OFF</code></td>
+<td><code>ON</code></td>
+</tr>
+<tr>
+<td><code>CopLast</code></td>
+<td><code>COPLAST</code></td>
+<td>Performs DNS lookup of coplast to end COP discovery</td>
+<td><code>ON</code>,<code>OFF</code></td>
+<td><code>ON</code></td>
+</tr>
+<tr>
+<td><code>Timeout</code></td>
+<td><code>TIMEOUT</code></td>
+<td>Connection Timeout in Seconds</td>
+<td>&gt;0</td>
+<td><code>60</code></td>
+</tr>
+<tr>
+<td><code>Partition</code></td>
+<td><code>PARTITION</code></td>
+<td></td>
+<td></td>
+<td><code>DBC/SQL</code></td>
+</tr>
+<tr>
+<td><code>ConnectFunction</code></td>
+<td><code>CONNECT_FUNCTION</code></td>
+<td></td>
+<td><code>0</code>,<code>1</code>,<code>2</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>MaxMessageSize</code></td>
+<td><code>MAX_MESSAGE_BODY</code></td>
+<td></td>
+<td>&gt;0</td>
+<td><code>2097152</code></td>
+</tr>
+<tr>
+<td><code>EncryptData</code></td>
+<td><code>ENCRYPTDATA</code></td>
+<td>ON=Encrypt query data when not using TLS connection, OFF=Only encrypt authentication</td>
+<td><code>ON</code>,<code>OFF</code></td>
+<td><code>OFF</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="tls-options">TLS Options</h4>
+<table>
+<thead>
+<tr>
+<th>Config Option</th>
+<th>URL Param</th>
+<th>Description</th>
+<th>Allowed</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SSLMode</code></td>
+<td><code>SSLMODE</code></td>
+<td>TLS Connection Mode (see JDBC connection string reference)</td>
+<td><code>DISABLE</code>,<code>ALLOW</code>,<code>PREFER</code>,<code>REQUIRE</code>,<code>VERIFY-CA</code>,<code>VERIFY-FULL</code></td>
+<td><code>PREFER</code></td>
+</tr>
+<tr>
+<td><code>SSLProtocol</code></td>
+<td><code>SSLPROTOCOL</code></td>
+<td>TLS Protocol Version for TLS Connections</td>
+<td></td>
+<td><code>TLSv1.3</code></td>
+</tr>
+<tr>
+<td><code>SSLServerName</code></td>
+<td><code>SSLSERVERNAME</code></td>
+<td>For TLS hostname verification</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>SSLCA</code></td>
+<td><code>SSLCA</code></td>
+<td>Path to single PEM file</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>SSLCAPath</code></td>
+<td><code>SSLCAPATH</code></td>
+<td>Path to directory containing PEM files</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>SSLBase64</code></td>
+<td><code>SSLBASE64</code></td>
+<td>Base64 encoded contents of PEM file</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>SSLPort</code></td>
+<td><code>HTTPS_PORT</code></td>
+<td>Port to use for TLS connections</td>
+<td></td>
+<td><code>443</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="lob-options">LOB Options</h4>
+<table>
+<thead>
+<tr>
+<th>Config Option</th>
+<th>URL Param</th>
+<th>Description</th>
+<th>Allowed</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LOBSupport</code></td>
+<td><code>LOB_SUPPORT</code></td>
+<td>Enable/Disable LOB support</td>
+<td><code>ON</code>,<code>OFF</code></td>
+<td><code>ON</code></td>
+</tr>
+<tr>
+<td><code>LOBRecieveThreshold</code></td>
+<td><code>SLOB_RECEIVE_THRESHOLD</code></td>
+<td>Threshold for inlining LOBs - use to tune memory usage</td>
+<td>&gt;0</td>
+<td><code>1000</code></td>
+</tr>
+<tr>
+<td><code>LOBPrefetch</code></td>
+<td><code>LOB_PREFETCH</code></td>
+<td>Prefetch LOBs on rows.Next() - allows you to scan as string/[]byte directly but will have a negative memory impact for large LOBs</td>
+<td><code>ON</code>,<code>OFF</code></td>
+<td><code>OFF</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="fastload-options">FastLoad Options</h4>
+<table>
+<thead>
+<tr>
+<th>Config Option</th>
+<th>URL Param</th>
+<th>Description</th>
+<th>Allowed</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MaxFastLoadSessions</code></td>
+<td><code>MAX_FASTLOAD_SESSIONS</code></td>
+<td>Max number of fastload data sessions</td>
+<td><code>&gt;0</code></td>
+<td><code>8</code></td>
+</tr>
+</tbody>
+</table>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href=".." class="btn btn-neutral float-left" title="Home"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../fastload/" class="btn btn-neutral float-right" title="Fast Load">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href=".." style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../fastload/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

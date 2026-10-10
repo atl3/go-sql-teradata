@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"database/sql/driver"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -61,6 +62,7 @@ type teradataConnection struct {
 	polSecurityLevel           int
 
 	//openKeepStatement bool
+	logonSequenceNumber int
 }
 
 type teradataTransaction struct {
@@ -90,6 +92,11 @@ type connectionCapabilities struct {
 	slobClientToServerSupport      byte
 	numberDataTypeSupport          bool
 	statementInfoRequestSupport    bool
+	checkWorkloadSupported         bool
+	ampCount                       int
+	largeDecimalSupport            bool
+	largeIndicDataSupport          bool
+	maxRequestMessageBodySize      int
 }
 
 func (c *connectionCapabilities) String() string {
@@ -114,8 +121,12 @@ func (c *connectionCapabilities) String() string {
 			"maxResponseMessageBodySize: %d,"+
 			"slobClientToServerSupport: %d, "+
 			"aphSupport: %t,"+
-			"numberDataTypeSupport: %t,"+
-			"statementInfoRequestSupport: %t"+
+			"numberDataTypeSupport: %t, "+
+			"statementInfoRequestSupport: %t, "+
+			"checkWorkloadSupported: %t, "+
+			"ampCount: %d, "+
+			"largeDecimalSupport: %t, "+
+			"largeIndicDataSupport: %t"+
 			"}",
 		c.defaultTransactionSemantics,
 		c.statementStatusLevel,
@@ -138,6 +149,10 @@ func (c *connectionCapabilities) String() string {
 		c.aphSupport,
 		c.numberDataTypeSupport,
 		c.statementInfoRequestSupport,
+		c.checkWorkloadSupported,
+		c.ampCount,
+		c.largeDecimalSupport,
+		c.largeIndicDataSupport,
 	)
 }
 
@@ -164,6 +179,14 @@ func newConnectionCapabilities(cnfg *configResponseParcel) *connectionCapabiliti
 		slobClientToServerSupport:      cnfg.slobClientToServerSupport,
 		numberDataTypeSupport:          cnfg.numberDataTypeSupport >= 1 && cnfg.statementInfoSupport >= 1,
 		statementInfoRequestSupport:    cnfg.statementInfoRequestSupport >= 1,
+		checkWorkloadSupported:         cnfg.checkWorkloadSupport >= 1,
+		ampCount:                       int(cnfg.ampCount),
+		largeDecimalSupport:            cnfg.largeDecimalBIGINT >= 1,
+		largeIndicDataSupport:          cnfg.maxUsingDataBytes > 64230,
+		maxRequestMessageBodySize:      int(cnfg.maxRequestBytes),
+	}
+	if c.maxRequestMessageBodySize == 0 {
+		c.maxRequestMessageBodySize = 1048500 // ConfigRspParcel.maxRequestBytes default
 	}
 	if c.maxResponseMessageBodySize == 0 {
 		c.maxResponseMessageBodySize = 1048500
@@ -175,7 +198,7 @@ func (c *teradataConnection) Begin() (driver.Tx, error) {
 	if c.currentTransaction == nil {
 		// We only have to worry about TERA mode here
 		if c.transactionMode == teraMode && !c.transactionInProgress {
-			err := c.execSessionSQL("BT")
+			_, err := c.execSessionSQL("BT")
 			if err != nil {
 				return nil, err
 			}
@@ -245,9 +268,58 @@ func (c *teradataConnection) prepare(query string) (*teradataStatement, error) {
 }
 
 // Helper for executing inline SQL on the open connection (Begin Transaction, Commit, Rollback, etc)
-func (c *teradataConnection) execSessionSQL(query string) error {
+func (c *teradataConnection) execSessionSQL(query string) (*statementInfoResponseParcel, error) {
 	if c.closed.Load() {
-		return driver.ErrBadConn
+		return nil, driver.ErrBadConn
+	}
+	err := c.writeLanMessage(
+		c.newLanHeaderStart(),
+		//newOptionsParcelInline(c),
+		newOptionsParcelExecute(c),
+		newIndicRequestParcel(query),
+		newRespondParcel(c.capabilities, c.config),
+	)
+	if err != nil {
+		return nil, err
+	}
+	respParcels, _, err := c.readLanMessage()
+	if err != nil {
+		return nil, err
+	}
+	if info, ok := findParcel[*statementInfoResponseParcel](respParcels); ok {
+		return info, nil
+	}
+	// No error even if missing statementInfo
+	return nil, nil
+}
+
+// execSessionUpdate is execSessionSQL for statements whose activity count
+// matters (e.g. END LOADING's rows-loaded count).
+func (c *teradataConnection) execSessionUpdate(query string) (int64, error) {
+	if c.closed.Load() {
+		return 0, driver.ErrBadConn
+	}
+	err := c.writeLanMessage(
+		c.newLanHeaderStart(),
+		newOptionsParcelExecute(c),
+		newIndicRequestParcel(query),
+		newRespondParcel(c.capabilities, c.config),
+	)
+	if err != nil {
+		return 0, err
+	}
+	respParcels, _, err := c.readLanMessage()
+	if err != nil {
+		return 0, err
+	}
+	n, _ := activityCountFromStatusParcels(respParcels)
+	return int64(n), nil
+}
+
+// Helper for small control queries - reads single row from query
+func (c *teradataConnection) execSessionQuery(query string) ([]driver.Value, error) {
+	if c.closed.Load() {
+		return nil, driver.ErrBadConn
 	}
 	err := c.writeLanMessage(
 		c.newLanHeaderStart(),
@@ -256,43 +328,100 @@ func (c *teradataConnection) execSessionSQL(query string) error {
 		newRespondParcel(c.capabilities, c.config),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, _, err = c.readLanMessage()
-	return err
+	parcelData, parcelStart, parcelEnd, _, err := c.readLanMessageRaw() //readLanMessageRawOwned()
+	if err != nil {
+		return nil, err
+	}
+	rowData := make([]driver.Value, 0)
+	rowDone := false
+	var columnMetas []statementInfoMetaItem
+	reader := newBufferReader(parcelData, parcelStart, parcelEnd)
+	if err := checkErrorParcel(reader); err != nil {
+		return nil, err
+	}
+	for {
+		parcelStart := reader.position()
+		flavor, parcelLen, _ := readParcelHeader(reader)
+		if !rowDone {
+			switch flavor {
+			case uint16(flavorStatementInfo):
+				parcel, err := responseParcelFactory(flavor)
+				if err != nil {
+					return nil, err
+				}
+				err = parcel.fromBuffer(reader, int(parcelLen))
+				if err != nil {
+					return nil, err
+				}
+				if si, ok := parcel.(*statementInfoResponseParcel); ok {
+					columnMetas = si.resultSetColumnMetaItems()
+				}
+			case uint16(flavorRecord), uint16(flavorMultiPartRecord):
+				if columnMetas == nil {
+					return nil, errors.New("internal: resultset missing column metadata")
+				}
+				nullIndicators := reader.bytes((len(columnMetas) + 7) / 8)
+				for colIndex, meta := range columnMetas {
+					if fmeta, ok := meta.(*statementInfoMetaDataFull); ok {
+						isNull := nullIndicators[colIndex/8]&(0x80>>uint(colIndex%8)) != 0
+						v, err := produceColumnValue(reader, fmeta, isNull, c)
+						if err != nil {
+							return nil, err
+						}
+						colName := fmeta.asClauseName
+						if colName == "" {
+							colName = fmeta.columnOrParamName
+						}
+						if colName == "" {
+							colName = fmt.Sprintf("col%d", colIndex)
+						}
+						rowData = append(rowData, v)
+					}
+				}
+			case uint16(flavorMultiPartEnd):
+				rowDone = true
+			}
+		}
+		reader.seek(parcelStart + int(parcelLen))
+		if reader.isDone() {
+			break
+		}
+	}
+	return rowData, nil
 }
 
 func (c *teradataConnection) Close() (err error) {
 	if c.closed.Swap(true) {
 		return
 	}
-	if c.netConn != nil {
-		err := c.writeLanMessage(
-			c.newLanHeaderLogoff(),
-			newLogoffParcel(),
-		)
-		if err != nil {
-			return err
-		}
-		// TODO: Check response
-		_, _, err = c.readLanMessage()
-		if err != nil {
-			return err
-		}
-
-		err = c.netConn.Close()
-		if err != nil {
-			return err
-		}
+	if c.netConn == nil {
+		return nil
 	}
-	return nil
+	// Close the socket even if the logoff exchange fails
+	defer func() {
+		if cerr := c.netConn.Close(); err == nil {
+			err = cerr
+		}
+	}()
+	err = c.writeLanMessage(
+		c.newLanHeaderLogoff(),
+		newLogoffParcel(),
+	)
+	if err != nil {
+		return err
+	}
+	// TODO: Check response
+	_, _, err = c.readLanMessage()
+	return err
 }
 
 func (c *teradataConnection) Ping(ctx context.Context) (err error) {
 	if c.closed.Load() {
 		return driver.ErrBadConn
 	}
-	err = c.execSessionSQL("--isValid")
+	_, err = c.execSessionSQL("--isValid")
 	if err != nil && isConnectionError(err) {
 		c.closed.Store(true)
 		return driver.ErrBadConn
@@ -308,23 +437,6 @@ func (c *teradataConnection) handshake() (bool, error) {
 	}
 	c.capabilities = newConnectionCapabilities(capabailities)
 	c.config.Logger.Log(context.Background(), logLevelTrace, c.capabilities.String())
-
-	// Dechipher session transaction mode:
-	switch c.config.TMode {
-	case "DEFAULT":
-		// Dechpiher transaction mode from server default:
-		if c.capabilities.defaultTransactionSemantics == 'A' {
-			c.transactionMode = ansiMode
-		} else {
-			c.transactionMode = teraMode
-		}
-	case "TERA":
-		c.transactionMode = teraMode
-	case "ANSI":
-		c.transactionMode = ansiMode
-	default:
-		c.transactionMode = teraMode
-	}
 
 	// Check auth mechs
 	if authMech&authMechTd2 == authMechTd2 {
@@ -352,25 +464,65 @@ func (c *teradataConnection) handshake() (bool, error) {
 		return false, err
 	}
 
-	// Authenticate:
-	err = c.authenticate()
-	if err != nil {
-		return false, err
-	}
-
 	return true, nil
 }
 
 func (c *teradataConnection) authenticate() error {
+	// Dechipher session transaction mode:
+	switch c.config.TMode {
+	case "DEFAULT":
+		// Dechpiher transaction mode from server default:
+		if c.capabilities.defaultTransactionSemantics == 'A' {
+			c.transactionMode = ansiMode
+		} else {
+			c.transactionMode = teraMode
+		}
+	case "TERA":
+		c.transactionMode = teraMode
+	case "ANSI":
+		c.transactionMode = ansiMode
+	default:
+		c.transactionMode = teraMode
+	}
+	return c.baseAuthenticate([]parcel{
+		newLogonParcel(c.config.User, c.config.Password),
+		newSessionOptionsParcel(c.config, c.capabilities),
+		newConnectParcel(c.config, 0),
+	})
+}
+
+func (c *teradataConnection) fastLoadControlAuthenticate() error {
+	c.transactionMode = teraMode
+	return c.baseAuthenticate([]parcel{
+		newLogonParcel(c.config.User, c.config.Password),
+		newFastLoadSessionOptionsParcel(c.config, c.capabilities),
+		newFastLoadControlConnectParcel(),
+	})
+}
+
+func (c *teradataConnection) fastLoadDiagAuthenticate(lsn int) error {
+	c.transactionMode = teraMode
+	return c.baseAuthenticate([]parcel{
+		newLogonParcel(c.config.User, c.config.Password),
+		newFastLoadSessionOptionsParcel(c.config, c.capabilities),
+		newFastLoadDiagConnectParcel(lsn),
+	})
+}
+
+func (c *teradataConnection) fastLoadDataAuthenticate(lsn int) error {
+	c.transactionMode = teraMode
+	return c.baseAuthenticate([]parcel{
+		newLogonParcel(c.config.User, c.config.Password),
+		newFastLoadSessionOptionsParcel(c.config, c.capabilities),
+		newFastLoadDataConnectParcel(lsn),
+	})
+}
+
+func (c *teradataConnection) baseAuthenticate(parcels []parcel) error {
 	header := c.newLanHeaderConnect()
 	binary.BigEndian.PutUint64(header.authNonce[:], uint64(c.nextAuthNonce()))
 	if c.connectionID == "" {
 		c.connectionID = strings.TrimPrefix(fmt.Sprintf("%p", c), "0x")
-	}
-	parcels := []parcel{
-		newLogonParcel(c.config.User, c.config.Password),
-		newSessionOptionsParcel(c.config, c.capabilities),
-		newConnectParcel(c.config, 0),
 	}
 	support := c.capabilities.clientAttributesSupport
 	if support <= 1 {
@@ -391,7 +543,12 @@ func (c *teradataConnection) authenticate() error {
 	}
 
 	// If we get Success or EndRequest parcels then we consider it Good:
-	_, ok := findParcel[*successResponseParcel](respParcels)
+	lsnp, ok := findParcel[*logonSequenceNumberParcel](respParcels)
+	if ok {
+		c.logonSequenceNumber = lsnp.logonSequenceNumber
+	}
+
+	_, ok = findParcel[*successResponseParcel](respParcels)
 	if ok {
 		return nil
 	}
@@ -401,7 +558,6 @@ func (c *teradataConnection) authenticate() error {
 	}
 
 	return ErrInternal
-
 }
 
 func (con *teradataConnection) configHandshake() (*configResponseParcel, authMechFlag, map[string]*authMech, error) {
@@ -476,13 +632,13 @@ func (c *teradataConnection) isTlsConnection() bool {
 func (t *teradataTransaction) Commit() error {
 	if t.conn.transactionMode == teraMode {
 		for t.conn.transactionInProgress {
-			err := t.conn.execSessionSQL("ET")
+			_, err := t.conn.execSessionSQL("ET")
 			if err != nil {
 				return err
 			}
 		}
 	} else {
-		err := t.conn.execSessionSQL("COMMIT WORK")
+		_, err := t.conn.execSessionSQL("COMMIT WORK")
 		if err != nil {
 			return err
 		}
@@ -494,9 +650,9 @@ func (t *teradataTransaction) Commit() error {
 func (t *teradataTransaction) Rollback() error {
 	var err error
 	if t.conn.transactionMode == teraMode {
-		err = t.conn.execSessionSQL("ABORT")
+		_, err = t.conn.execSessionSQL("ABORT")
 	} else {
-		err = t.conn.execSessionSQL("ROLLBACK WORK")
+		_, err = t.conn.execSessionSQL("ROLLBACK WORK")
 	}
 
 	if err != nil {

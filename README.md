@@ -99,6 +99,12 @@ To date the connection options implemented are:
 | `LOBRecieveThreshold` | `SLOB_RECEIVE_THRESHOLD` | Threshold for inlining LOBs - use to tune memory usage | >0 | `1000` |
 | `LOBPrefetch` | `LOB_PREFETCH` | Prefetch LOBs on rows.Next() - allows you to scan as string/[]byte directly but will have a negative memory impact for large LOBs | `ON`,`OFF` | `OFF` |
 
+#### FastLoad Options:
+| Config Option | URL Param | Description | Allowed | Default |
+|---------------|-----------| ------------|---------|---------|
+| `MaxFastLoadSessions` | `MAX_FASTLOAD_SESSIONS` | Max number of fastload data sessions | `>0` | `8` |
+
+
 ## TLS
 
 By default the driver using SSLMode=Prefer and port 443. This means it will first attempt to connect with TLS on port 443 but won't enforce any certificate or hostname validations. Additionally it will fallback to the non-TLS port (1025 by default) if unable to establish a TLS connection.
@@ -157,7 +163,63 @@ func main() {
 }
 ```
 
-...
+## FastLoad
+
+Example:
+
+```go
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	teradata "github.com/atl3/go-sql-teradata"
+)
+
+func fastLoadDemo() {
+	cfg := &teradata.Config{
+		Host:     "...",
+		User:     "...",
+		Password: "...",
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// Create Connection
+	fcon, err := teradata.NewFastLoadConnection(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fcon.Close()
+
+	// Begin Load
+	tx, err := fcon.BeginFastLoad(ctx, "DATABASE_NAME", "TABLE_NAME", "COL1", "COL2") // ...
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tx.Close()
+
+	// Load
+	for i := range 10000 {
+		_, err = tx.AddRow(ctx, i+500, fmt.Sprintf("FastLoad Demo %d", i))
+		if err != nil {
+			tx.Abort(ctx)
+			log.Fatal(err)
+		}
+	}
+
+	// End
+	results, err := tx.End(ctx)
+	fmt.Printf("RowsSent=%d, RowsAccepted=%d, UniqueViolations=%d\n", results.RowsSent, results.RowsAccepted, results.UniqueViolations)
+	if len(results.Errors) > 0 {
+		fmt.Println("Errors:")
+		for _, e := range results.Errors {
+			fmt.Printf(" - FastLoad Error: RowNumber=%d, Column=%s, ErrorCode=%d\n", e.RowNumber, e.Column, e.ErrorCode)
+		}
+	}
+}
+```
 
 ## Logging
 
@@ -189,7 +251,6 @@ func main() {
 - Stored procedure support
 - ARRAY / structured UDT data types 
 - Query Banding
-- FastLoad
 
 ----
 

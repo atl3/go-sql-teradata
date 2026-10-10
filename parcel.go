@@ -127,6 +127,16 @@ func checkErrorParcel(reader *bufferReader) error {
 	return nil
 }
 
+func activityCountFromStatusParcels(parcels []responseParcel) (uint64, bool) {
+	if status, ok := findParcel[*statementStatusParcel](parcels); ok {
+		return status.activityCount + status.mergeInsertCount + status.mergeUpdateCount + status.mergeDeleteCount, true
+	}
+	if success, ok := findParcel[*successResponseParcel](parcels); ok {
+		return uint64(success.activityCount), true
+	}
+	return 0, false
+}
+
 func responseParcelFactory(flavor uint16) (responseParcel, error) {
 	switch flavor {
 	case uint16(flavorError), uint16(flavorFailure):
@@ -165,6 +175,8 @@ func responseParcelFactory(flavor uint16) (responseParcel, error) {
 	//	return &multiPartRecordParcel{}, nil
 	case uint16(flavorMultiPartEnd):
 		return &multiPartRecordEndParcel{}, nil
+	case uint16(flavorLSN):
+		return &logonSequenceNumberParcel{}, nil
 	}
 	return nil, fmt.Errorf("unknown parcel, flavor=%d", flavor)
 }

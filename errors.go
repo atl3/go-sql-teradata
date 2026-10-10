@@ -37,6 +37,11 @@ var (
 	ErrTlsHostFail           = errors.New("tls hostname verification failed")
 	ErrInvalidLobSize        = errors.New("invalid lob length on read")
 	ErrTd2InvalidAlg         = errors.New("only AES with GCM96 is supported")
+	ErrFastConnectFailed     = errors.New("fastload connection failed")
+	ErrFastLoadNotClosed     = errors.New("fastload transaction in progress, it must be closed before starting a new one")
+	ErrFastLoadNoColumns     = errors.New("fastload columns are required")
+	ErrFastLoadUnsupported   = errors.New("fastload not supported for this table")
+	ErrFastLoadFinished      = errors.New("fastload transaction has already ended or been aborted")
 )
 
 type TeradataError struct {

@@ -66,6 +66,17 @@ func (w *bufferWriter) bytes(v []byte) *bufferWriter {
 	return w
 }
 
+// str copies a string without converting it to a []byte first.
+func (w *bufferWriter) str(v string) *bufferWriter {
+	if len(v) == 0 {
+		return w
+	}
+	_ = w.buff[w.indx+len(v)-1]
+	copy(w.buff[w.indx:], v)
+	w.indx += len(v)
+	return w
+}
+
 func (w *bufferWriter) byte(v byte) *bufferWriter {
 	_ = w.buff[w.indx]
 	w.buff[w.indx] = v

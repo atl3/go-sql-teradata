@@ -57,6 +57,9 @@ type Config struct {
 	LOBRecieveThreshold int  // SLOB_RECEIVE_THRESHOLD default=1000
 	LOBPrefetch         bool // LOB_PREFETCH  default="OFF" allowed="ON,OFF"
 
+	// Fastload
+	MaxFastLoadSessions int
+
 	Logger *slog.Logger
 
 	// Settings
@@ -80,6 +83,7 @@ func NewConfig() *Config {
 		LOBPrefetch:         false,
 		Partition:           "DBC/SQL",
 		ConnectFunction:     0,
+		MaxFastLoadSessions: 8,
 	}
 	cfg.normalize()
 	return cfg
@@ -104,6 +108,7 @@ func NewTeradataConfig(host, user, pass string) *Config {
 		LOBPrefetch:         false,
 		Partition:           "DBC/SQL",
 		ConnectFunction:     0,
+		MaxFastLoadSessions: 8,
 	}
 	cfg.normalize()
 	return cfg
@@ -215,6 +220,9 @@ func (c *Config) normalize() {
 	if c.Partition == "" {
 		c.Partition = "DBC/SQL"
 	}
+	if c.MaxFastLoadSessions < 1 {
+		c.MaxFastLoadSessions = 8
+	}
 	c.sslLevel = decodeSslMode(c.SSLMode)
 }
 
@@ -275,7 +283,8 @@ func generateDsnParamString(config *Config) string {
 	paramCount = writeDsnParam(&paramBuilder, paramCount, "MAX_MESSAGE_BODY", strconv.Itoa(config.MaxMessageSize), config.MaxMessageSize != 2097152)
 	paramCount = writeDsnParam(&paramBuilder, paramCount, "SLOB_RECEIVE_THRESHOLD", strconv.Itoa(config.LOBRecieveThreshold), config.LOBRecieveThreshold != 1000)
 	paramCount = writeDsnParam(&paramBuilder, paramCount, "CONNECT_FUNCTION", strconv.Itoa(config.ConnectFunction), config.ConnectFunction != 0)
-	writeDsnParam(&paramBuilder, paramCount, "PARTITION", config.Partition, config.Partition != "")
+	paramCount = writeDsnParam(&paramBuilder, paramCount, "PARTITION", config.Partition, config.Partition != "")
+	writeDsnParam(&paramBuilder, paramCount, "MAX_FASTLOAD_SESSIONS", strconv.Itoa(config.MaxFastLoadSessions), config.MaxFastLoadSessions != 8)
 	return paramBuilder.String()
 }
 
@@ -328,6 +337,8 @@ func parseUrlArgs(config *Config, params *url.Values) error {
 
 	config.Partition = params.Get("PARTITION")
 	config.ConnectFunction = parseIntArg(params.Get("CONNECT_FUNCTION"))
+
+	config.MaxFastLoadSessions = parseIntArg(params.Get("MAX_FASTLOAD_SESSIONS"))
 	return nil
 }
 

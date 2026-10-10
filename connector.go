@@ -38,26 +38,33 @@ func newConnector(config *Config) *teradataConnector {
 }
 
 func (c *teradataConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	return c.connect(ctx, false)
+	conn, err := c.connect(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// Config / Handshake
+	if ok, err := conn.handshake(); !ok || err != nil {
+		return nil, err
+	}
+
+	// Authenticate
+	err = conn.authenticate()
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
 }
 
-func (c *teradataConnector) connect(ctx context.Context, tlsFallback bool) (driver.Conn, error) {
+func (c *teradataConnector) connect(ctx context.Context, tlsFallback bool) (*teradataConnection, error) {
 	var err error
 
 	// On first connect we run COP discovery / IP Lookup
 	if len(c.discoveredIps) == 0 {
-		c.discoveredIps = make([]string, 0)
-		if c.config.CopMode {
-			err = c.copDiscovery()
-			if err != nil {
-				return nil, wrapConnectionError(err)
-			}
-		} else {
-			ips, err := net.LookupHost(c.config.Host)
-			if err != nil {
-				return nil, errors.New("unable to find host")
-			}
-			c.discoveredIps = append(c.discoveredIps, ips...)
+		err = c.discoverIps()
+		if err != nil {
+			return nil, wrapConnectionError(err)
 		}
 	}
 
@@ -167,11 +174,21 @@ func (c *teradataConnector) connect(ctx context.Context, tlsFallback bool) (driv
 		}
 	}
 
-	if ok, err := conn.handshake(); !ok || err != nil {
-		return nil, err
-	}
-
 	return conn, nil
+}
+
+func (c *teradataConnector) discoverIps() error {
+	c.discoveredIps = make([]string, 0)
+	if c.config.CopMode {
+		return c.copDiscovery()
+	} else {
+		ips, err := net.LookupHost(c.config.Host)
+		if err != nil {
+			return errors.New("unable to find host")
+		}
+		c.discoveredIps = append(c.discoveredIps, ips...)
+	}
+	return nil
 }
 
 func (c *teradataConnector) copDiscovery() error {

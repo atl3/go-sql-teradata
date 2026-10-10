@@ -233,6 +233,25 @@ func (p *ssoResponseParcel) fromBuffer(reader *bufferReader, length int) error {
 	return nil
 }
 
+type logonSequenceNumberParcel struct {
+	logonSequenceNumber int
+}
+
+func (p *logonSequenceNumberParcel) getFlavor() parcelFlavor {
+	return flavorLSN
+}
+
+func (p *logonSequenceNumberParcel) String() string {
+	return fmt.Sprintf("logonSequenceNumberParcel{logonSequenceNumber=%d}", p.logonSequenceNumber)
+}
+
+func (p *logonSequenceNumberParcel) fromBuffer(reader *bufferReader, length int) error {
+	p.logonSequenceNumber = int(reader.u32())
+	return nil
+}
+
+//flavorLSN
+
 // Record Parcel
 type recordParcel struct {
 	stmtInfo       *statementInfoResponseParcel
@@ -498,7 +517,7 @@ func (p *statementInfoResponseParcel) fromBuffer(reader *bufferReader, length in
 			} else if metaContentType >= 1 && metaContentType <= 6 {
 				p.metaItems[metaContentType-1] = append(p.metaItems[metaContentType-1], metaItem)
 			} else if metaContentType != 7 {
-				return fmt.Errorf("invalid meta content type: %d", metaContentType)
+				//return fmt.Errorf("invalid meta content type: %d", metaContentType)
 			}
 
 			// Push step:

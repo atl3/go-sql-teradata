@@ -238,6 +238,19 @@ func newSessionOptionsParcel(config *Config, capabilities *connectionCapabilitie
 	}
 }
 
+func newFastLoadSessionOptionsParcel(config *Config, capabilities *connectionCapabilities) *sessionOptionsParcel {
+	const tmode byte = 'T'
+	if capabilities.statementStatusLevel >= 1 {
+		// ESS Flag and Level
+		return &sessionOptionsParcel{
+			body: []byte{tmode, 'N', 'N', 'D', 'E', 0, 0, 0, 1, 0},
+		}
+	}
+	return &sessionOptionsParcel{
+		body: []byte{tmode, 'N', 'N', 'D', 0, 0, 0, 0, 0, 0},
+	}
+}
+
 func (p *sessionOptionsParcel) getFlavor() parcelFlavor {
 	return flavorSessionOptions
 }
@@ -265,6 +278,30 @@ func newConnectParcel(config *Config, logonSeqNum int) *connectParcel {
 		logonSeqNum:   logonSeqNum,
 		function:      config.ConnectFunction,
 		partitionName: config.Partition,
+	}
+}
+
+func newFastLoadControlConnectParcel() *connectParcel {
+	return &connectParcel{
+		logonSeqNum:   0,
+		function:      1,
+		partitionName: "DBC/SQL",
+	}
+}
+
+func newFastLoadDiagConnectParcel(lsn int) *connectParcel {
+	return &connectParcel{
+		logonSeqNum:   lsn,
+		function:      2,
+		partitionName: "DBC/SQL",
+	}
+}
+
+func newFastLoadDataConnectParcel(lsn int) *connectParcel {
+	return &connectParcel{
+		logonSeqNum:   lsn,
+		function:      2,
+		partitionName: "FASTLOAD",
 	}
 }
 
@@ -339,10 +376,10 @@ const (
 	requestModePrepare        = 80
 	requestModeStatic         = 83
 
-	dbcFunctionExecute         = 'B' // B_MODE
-	dbcFunctionExecutePrepared = 'E' // E_MODE
-	dbcFunctionPrepare         = 'P' // P_MODE
-	dbcFunctionCall            = 'S' // S_MODE
+	dbcFunctionExecute       = 'B' // B_MODE
+	dbcFunctionExecuteUpdate = 'E' // E_MODE
+	dbcFunctionPrepare       = 'P' // P_MODE
+	dbcFunctionCall          = 'S' // S_MODE
 
 	resultSetReturnSender   = 0
 	resultSetReturnClient   = 1
@@ -499,7 +536,7 @@ func newOptionsParcelExecute(con *teradataConnection) *optionsParcel {
 	if con.capabilities.lobSupport {
 		requestMode = requestModeMultipartIndic
 	}
-	return newOptionsParcel(con, requestMode, dbcFunctionExecutePrepared, 'S')
+	return newOptionsParcel(con, requestMode, dbcFunctionExecuteUpdate, 'S')
 }
 
 func newOptionsParcelLobSelect(con *teradataConnection) *optionsParcel {
@@ -507,7 +544,7 @@ func newOptionsParcelLobSelect(con *teradataConnection) *optionsParcel {
 	if con.capabilities.lobSupport {
 		requestMode = requestModeMultipartIndic
 	}
-	return newOptionsParcel(con, requestMode, dbcFunctionExecutePrepared, 'I')
+	return newOptionsParcel(con, requestMode, dbcFunctionExecuteUpdate, 'I')
 }
 
 func newOptionsParcel(con *teradataConnection, requestMode int, dbcFunction int, lobMode byte) *optionsParcel {
